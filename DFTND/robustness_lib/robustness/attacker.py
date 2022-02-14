@@ -55,6 +55,8 @@ class Attacker(ch.nn.Module):
 
         def get_adv_examples(x):
 
+            batch_size = x.shape[0]
+
             pert = ch.empty(x.shape).normal_(mean=0,std=sigma).cuda()
             #print(ch.max(pert).item())
             # Random start (to escape certain types of gradient masking)
@@ -87,7 +89,7 @@ class Attacker(ch.nn.Module):
             #print(M.shape)
             
             #weight method
-            W = ch.ones(2048, requires_grad=True).requires_grad_(True).cuda() / 2048
+            W = ch.ones(512, requires_grad=True).requires_grad_(True).cuda() / 2048
             
             #If using the refine fix method, please comment the weight method and uncomment the fix method
             #fix method
@@ -110,8 +112,7 @@ class Attacker(ch.nn.Module):
                 W = W.detach().requires_grad_(True)
                 #
                 x = (1 - M) * (x0 + pert) + M * delta
-                
-                
+
                 #x = x + pert
 
                 x = ch.clamp(x, 0, 1)
@@ -121,8 +122,8 @@ class Attacker(ch.nn.Module):
 #                 maxp = ch.argmax(losses, 1)
 #                 for iii in range(10):
 #                     W[iii][maxp[iii]] = 1
-                
-                W1 = W.unsqueeze(0).expand(10, -1)
+
+                W1 = W.unsqueeze(0).expand(batch_size, -1)
 
                 #W1 = W
                 losses = losses * W1
@@ -133,7 +134,6 @@ class Attacker(ch.nn.Module):
                 #fix method
 #                 grad_d, grad_m = ch.autograd.grad(loss, [delta, M])
                 #
-
 
                 with ch.no_grad():
                     args = [losses, best_loss, x, best_x]
@@ -160,9 +160,9 @@ class Attacker(ch.nn.Module):
             
             #refine using the average
             delta = delta.mean(0)
-            delta = delta.unsqueeze(0).expand(10, -1, -1, -1).requires_grad_(True)
+            delta = delta.unsqueeze(0).expand(batch_size, -1, -1, -1).requires_grad_(True)
             M = M.mean(0)
-            M = M.unsqueeze(0).expand(10, -1, -1, -1).requires_grad_(True)
+            M = M.unsqueeze(0).expand(batch_size, -1, -1, -1).requires_grad_(True)
             #weight method
             W = W.requires_grad_(True)
             
@@ -185,7 +185,7 @@ class Attacker(ch.nn.Module):
 
                 x = ch.clamp(x, 0, 1)
                 losses, out = calc_loss(ch.clamp(x, 0, 1), target)
-                W1 = W.unsqueeze(0).expand(10, -1)
+                W1 = W.unsqueeze(0).expand(batch_size, -1)
                 
 #                 W = ch.zeros_like(losses, requires_grad=True).requires_grad_(True)
 #                 maxp = ch.argmax(losses, 1)
@@ -248,7 +248,6 @@ class Attacker(ch.nn.Module):
             return best_x
 
 
-
         # Random restarts: repeat the attack and find the worst-case
         # example for each input in the batch
         if random_restarts:
@@ -283,6 +282,7 @@ class AttackerModel(ch.nn.Module):
 
     def forward(self, inp, target=None, make_adv=False, with_latent=False,
                     fake_relu=False, with_image=True, **attacker_kwargs):
+
         if make_adv:
             assert target is not None
             prev_training = bool(self.training)
